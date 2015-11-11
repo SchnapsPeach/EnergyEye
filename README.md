@@ -1,6 +1,6 @@
 # EnergyEye- An IoT-Projekt
 
-**Based on freeRTOS for esp:** https://github.com/SuperHouse/esp-open-rtos.git
+**Based on freeRTOS for esp:** https://github.com/SuperHouse/esp-open-rtos
 
 **required Toolchain:** https://github.com/pfalcon/esp-open-sdk
 
