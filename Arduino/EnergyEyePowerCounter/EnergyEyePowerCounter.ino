@@ -339,7 +339,7 @@ boolean getMacAddress()
 
 
 
-boolean updateStream(float energy)
+boolean updateStream(int energy)
 {
   String cmd = "AT+CIPSTART=\"TCP\",\"";
   cmd += server_name;
@@ -358,7 +358,7 @@ boolean updateStream(float energy)
   cmd += "private_key=";
   cmd += private_key;
   cmd += "&energy=";
-  cmd += energy;
+  cmd += String(energy);
   cmd += "\r\n";  
   serialESP8266.print("AT+CIPSEND=");
   serialESP8266.println(cmd.length());
