@@ -34,7 +34,7 @@ static char req[1024];
 const int gpioLED = 13;
 const int gpio = 4;   /* gpio 0 usually has "PROGRAM" button attached */
 const int active = 0; /* active == 0 for active low */
-const gpio_inttype_t int_type = GPIO_INTTYPE_EDGE_ANY;
+const gpio_inttype_t int_type = GPIO_INTTYPE_EDGE_NEG;
 int ledON = 1;
 #define GPIO_HANDLER gpio04_interrupt_handler
 
@@ -45,7 +45,7 @@ int http_post_request(int val) {
 	};
 	struct addrinfo *res;
 
-	printf("Running DNS lookup for %s...\r\n", WEB_SERVER);
+	//printf("Running DNS lookup for %s...\r\n", WEB_SERVER);
 	int err = getaddrinfo(WEB_SERVER, WEB_PORT, &hints, &res);
 
 	if(err != 0 || res == NULL) {
@@ -56,8 +56,8 @@ int http_post_request(int val) {
 		return -1;
 	}
 	/* Note: inet_ntoa is non-reentrant, look at ipaddr_ntoa_r for "real" code */
-	struct in_addr *addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
-	printf("DNS lookup succeeded. IP=%s\r\n", inet_ntoa(*addr));
+	//struct in_addr *addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
+	//printf("DNS lookup succeeded. IP=%s\r\n", inet_ntoa(*addr));
 
 	int s = socket(res->ai_family, res->ai_socktype, 0);
 	if(s < 0) {
@@ -67,7 +67,7 @@ int http_post_request(int val) {
 		return -1;
 	}
 
-	printf("... allocated socket\r\n");
+	//printf("... allocated socket\r\n");
 
 	if(connect(s, res->ai_addr, res->ai_addrlen) != 0) {
 		close(s);
@@ -77,7 +77,7 @@ int http_post_request(int val) {
 		return -1;
 	}
 
-	printf("... connected\r\n");
+	//printf("... connected\r\n");
 	freeaddrinfo(res);
 
 	const char *req_format =
@@ -102,9 +102,10 @@ int http_post_request(int val) {
 		vTaskDelay(4000 / portTICK_RATE_MS);
 		return -1;
 	}
-	printf("... socket send success\r\n");
+	//printf("... socket send success\r\n");
 		
-	printf("POST_REQUEST:\n%s", req);
+	//printf("POST_REQUEST:\n%s", req);
+	//printf("field1: %d\n", val);
 
 	static char recv_buf[128];
 	int r = 0;
@@ -112,7 +113,7 @@ int http_post_request(int val) {
 		bzero(recv_buf, 128);
 		r = read(s, recv_buf, 127);
 		if(r > 0) {
-			printf("%s", recv_buf);
+			//printf("%s", recv_buf);
 		}
 	} while(r > 0);
 	printf("\n");
@@ -149,8 +150,10 @@ static xQueueHandle tsqueue;
 
 void GPIO_HANDLER(void)
 {
+	ledON = 0;
     uint8_t val = ledON;
 	gpio_write(gpioLED, ledON);
+	printf("val: %d\n", val);
 	ledON = !ledON;
     xQueueSendToBackFromISR(tsqueue, &val, NULL);
 }
