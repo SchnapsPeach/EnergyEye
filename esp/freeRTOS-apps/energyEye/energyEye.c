@@ -32,10 +32,8 @@ static char req[1024];
 
 /* pin config */
 const int gpioLED = 13;
-const int gpio = 4;   /* gpio 0 usually has "PROGRAM" button attached */
-const int active = 0; /* active == 0 for active low */
-const gpio_inttype_t int_type = GPIO_INTTYPE_EDGE_NEG;
-int ledON = 1;
+const int gpioIN = 4;  
+const gpio_inttype_t int_type = GPIO_INTTYPE_EDGE_POS;
 #define GPIO_HANDLER gpio04_interrupt_handler
 
 int http_post_request(int val) {
@@ -116,7 +114,7 @@ int http_post_request(int val) {
 			//printf("%s", recv_buf);
 		}
 	} while(r > 0);
-	printf("\n");
+	//printf("\n");
 	
 	close(s);
 
@@ -133,13 +131,13 @@ int http_post_request(int val) {
 */
 void gpioIntTask(void *pvParameters)
 {
-    printf("Waiting for button press interrupt on gpio %d...\r\n", gpio);
+    printf("Waiting for button press interrupt on gpio %d...\r\n", gpioIN);
     xQueueHandle *tsqueue = (xQueueHandle *)pvParameters;
-    gpio_set_interrupt(gpio, int_type);
 
     while(1) {
         uint8_t val;
         xQueueReceive(*tsqueue, &val, portMAX_DELAY);
+		printf("val: %d\n", val);
 		if (http_post_request(val) != 0) {
 			printf("ERROR: HTTP_POST Request failed :(\n");
 		}
@@ -150,19 +148,19 @@ static xQueueHandle tsqueue;
 
 void GPIO_HANDLER(void)
 {
-	ledON = 0;
-    uint8_t val = ledON;
-	gpio_write(gpioLED, ledON);
-	printf("val: %d\n", val);
-	ledON = !ledON;
+    uint8_t val = gpio_read(gpioIN);
+	gpio_write(gpioLED, val);
+	//printf("val: %d\n", val);
     xQueueSendToBackFromISR(tsqueue, &val, NULL);
+	gpio_write(gpioLED, !val);
 }
 
 void user_init(void)
 {
     uart_set_baud(0, 115200);
     printf("SDK version:%s\n", sdk_system_get_sdk_version());
-    gpio_enable(gpio, GPIO_INPUT);
+    gpio_enable(gpioIN, GPIO_INPUT);
+    gpio_set_interrupt(gpioIN, int_type);
     gpio_enable(gpioLED, GPIO_OUTPUT);
 
     struct sdk_station_config config = {
@@ -174,6 +172,6 @@ void user_init(void)
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_set_config(&config);
 
-    tsqueue = xQueueCreate(2, sizeof(uint8_t));
+    tsqueue = xQueueCreate(5, sizeof(uint8_t));
     xTaskCreate(gpioIntTask, (signed char *)"gpioIntTask", 256, &tsqueue, 2, NULL);
 }
