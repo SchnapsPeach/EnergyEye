@@ -6,6 +6,7 @@
  * This sample code is in the public domain.
  */
 #include "espressif/esp_common.h"
+#include "espressif/esp_system.h"
 #include "esp/uart.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -111,10 +112,10 @@ int http_post_request(int val) {
 		bzero(recv_buf, 128);
 		r = read(s, recv_buf, 127);
 		if(r > 0) {
-			//printf("%s", recv_buf);
+			printf("%s", recv_buf);
 		}
 	} while(r > 0);
-	//printf("\n");
+	printf("\n");
 	
 	close(s);
 
@@ -155,6 +156,17 @@ void GPIO_HANDLER(void)
 	gpio_write(gpioLED, !val);
 }
 
+void analogTask(void *pvParameters) {
+	while (1) {
+		uint16_t ad = sdk_system_adc_read();
+		if (ad > 0) {
+			printf("====== read analog ======\n");
+			printf("ad: %u\n", ad);
+		}
+		vTaskDelay(50 / portTICK_RATE_MS);			
+	}
+}
+
 void user_init(void)
 {
     uart_set_baud(0, 115200);
@@ -162,6 +174,7 @@ void user_init(void)
     gpio_enable(gpioIN, GPIO_INPUT);
     gpio_set_interrupt(gpioIN, int_type);
     gpio_enable(gpioLED, GPIO_OUTPUT);
+
 
     struct sdk_station_config config = {
         .ssid = WIFI_SSID,
@@ -174,4 +187,5 @@ void user_init(void)
 
     tsqueue = xQueueCreate(5, sizeof(uint8_t));
     xTaskCreate(gpioIntTask, (signed char *)"gpioIntTask", 256, &tsqueue, 2, NULL);
+    xTaskCreate(analogTask, (signed char *)"analogTask", 256, &tsqueue, 2, NULL);
 }

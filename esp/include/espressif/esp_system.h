@@ -58,6 +58,9 @@ bool sdk_system_rtc_mem_write(uint8_t dst, const void *src, uint16_t n);
 
 void sdk_system_uart_swap(void);
 
+uint16_t sdk_system_adc_read(void);
+uint16_t sdk_system_get_vdd33(void);
+
 #ifdef	__cplusplus
 }
 #endif
