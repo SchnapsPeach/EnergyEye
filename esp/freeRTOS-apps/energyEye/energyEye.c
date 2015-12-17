@@ -32,12 +32,22 @@ static char fields[128];
 static char req[1024];
 
 /* pin config */
-const int gpioLED = 13;
+//const int gpioLED = 13;
+
+const int gpio_r = 12;
+const int gpio_g = 13;
+const int gpio_b = 14;
+
+
 const int gpioIN = 4;  
 const gpio_inttype_t int_type = GPIO_INTTYPE_EDGE_POS;
 #define GPIO_HANDLER gpio04_interrupt_handler
 
 int http_post_request(int val) {
+
+    gpio_write(gpio_b, 1);
+    gpio_write(gpio_g, 0);
+
 	const struct addrinfo hints = {
 		.ai_family = AF_INET,
 		.ai_socktype = SOCK_STREAM,
@@ -149,31 +159,57 @@ static xQueueHandle tsqueue;
 
 void GPIO_HANDLER(void)
 {
-    uint8_t val = gpio_read(gpioIN);
-	gpio_write(gpioLED, val);
+    // Reads from gpio
+    //uint8_t val = gpio_read(gpioIN);
+	//gpio_write(gpio_r, val);
 	//printf("val: %d\n", val);
-    xQueueSendToBackFromISR(tsqueue, &val, NULL);
-	gpio_write(gpioLED, !val);
+    //xQueueSendToBackFromISR(tsqueue, &val, NULL);
+	//gpio_write(gpio_r, !val);
 }
 
 void analogTask(void *pvParameters) {
-	while (1) {
-		uint16_t ad = sdk_system_adc_read();
-		if (ad > 0) {
-			printf("====== read analog ======\n");
-			printf("ad: %u\n", ad);
+    bool visible_now  = false;
+    bool visible_prev = false;
+	int  threshold = 512;
+    while (1) {
+        visible_now  = false;
+		uint16_t ad  = sdk_system_adc_read();
+        printf("Analog read value: %u ", ad);
+		if (ad <= threshold) {
+            visible_now = true;
+			//printf("====== read analog ======\n");
+			printf("BELOW THRESHOLD ");
 		}
-		vTaskDelay(50 / portTICK_RATE_MS);			
+        gpio_write(gpio_r, visible_now);
+        if (visible_prev != visible_now) {
+            if (visible_now == true) {
+                printf("Marker +++++ START +++++ detected!");
+            }
+            if (visible_now == false) {
+                printf("Marker ----- STOP  ----- detected!");
+            }            
+            visible_prev = visible_now;
+        }
+        //xQueueSendToBackFromISR(tsqueue, &val, NULL);
+        fputs(visible_now ? "true" : "false", stdout);
+        printf("\n");
+        vTaskDelay(200 / portTICK_RATE_MS);		
 	}
 }
 
 void user_init(void)
 {
     uart_set_baud(0, 115200);
+
     printf("SDK version:%s\n", sdk_system_get_sdk_version());
+    
     gpio_enable(gpioIN, GPIO_INPUT);
     gpio_set_interrupt(gpioIN, int_type);
-    gpio_enable(gpioLED, GPIO_OUTPUT);
+
+    //gpio_enable(gpioLED, GPIO_OUTPUT);
+    gpio_enable(gpio_r, GPIO_OUTPUT);
+    gpio_enable(gpio_g, GPIO_OUTPUT);
+    gpio_enable(gpio_b, GPIO_OUTPUT);
 
 
     struct sdk_station_config config = {
@@ -187,5 +223,5 @@ void user_init(void)
 
     tsqueue = xQueueCreate(5, sizeof(uint8_t));
     xTaskCreate(gpioIntTask, (signed char *)"gpioIntTask", 256, &tsqueue, 2, NULL);
-    xTaskCreate(analogTask, (signed char *)"analogTask", 256, &tsqueue, 2, NULL);
+    xTaskCreate(analogTask,  (signed char *)"analogTask",  256, &tsqueue, 2, NULL);
 }
