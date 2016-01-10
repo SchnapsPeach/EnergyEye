@@ -1,0 +1,38 @@
+
+Messung des Zeitintervalls zwischen zwei roten Markierungen:
+
+
+
+==== Versuch 1: ====
+
+Nutzung von gettimeofday()
+
+Quelle: https://stackoverflow.com/questions/33107237/implicit-declaration-of-timersub-function-in-linux-what-must-i-define
+
+
+== Code: == 
+
+#include <sys/time.h>
+#define _BSD_SOURCE
+...
+    struct timeval tval_before, tval_after, tval_result;
+    gettimeofday(&tval_before, NULL);
+    // Some code you want to time, for example:
+    //sleep(1);
+    for (int i=0; i<1000; i++) {
+    }
+    gettimeofday(&tval_after, NULL);
+    //timersub(&tval_after, &tval_before, &tval_result);
+    printf("Time elapsed: %ld.%06ld\n", (long int)tval_result.tv_sec, (long int)tval_result.tv_usec);
+
+
+== Compile-Resultat: ==
+
+CC /home/rero/Workspaces/IoT/EnergyEye/esp/freeRTOS-apps/energyEye/energyEye.c
+AR build/program.a
+LD build/energyEye.out
+../../libc/xtensa-lx106-elf/lib/libc.a(lib_a-sysgettod.o):(.literal+0x0): undefined reference to `_gettimeofday_r'
+../../libc/xtensa-lx106-elf/lib/libc.a(lib_a-sysgettod.o): In function `gettimeofday':
+/home/gus/dev/esp/rtos/newlib/build/xtensa-lx106-elf/newlib/libc/syscalls/../../../../../newlib/libc/syscalls/sysgettod.c:12: undefined reference to `_gettimeofday_r'
+collect2: error: ld returned 1 exit status
+make: *** [build/energyEye.out] Error 1

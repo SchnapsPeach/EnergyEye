@@ -23,6 +23,14 @@
 
 #include "ssid_config.h"
 
+// Try 1:
+// Reference: https://stackoverflow.com/questions/33107237/implicit-declaration-of-timersub-function-in-linux-what-must-i-define
+#include <sys/time.h>
+#define _BSD_SOURCE
+
+
+
+
 #define WEB_SERVER "api.thingspeak.com"
 #define WEB_PORT "80"
 #define WEB_URL "https://api.thingspeak.com/update"
@@ -171,10 +179,26 @@ void analogTask(void *pvParameters) {
     bool visible_now  = false;
     bool visible_prev = false;
 	int  threshold = 512;
+
+
+    // Try 1:
+    struct timeval tval_before, tval_after, tval_result;
+    gettimeofday(&tval_before, NULL);
+    // Some code you want to time, for example:
+    //sleep(1);
+    for (int i=0; i<1000; i++) {
+    }
+    gettimeofday(&tval_after, NULL);
+    //timersub(&tval_after, &tval_before, &tval_result);
+    printf("Time elapsed: %ld.%06ld\n", (long int)tval_result.tv_sec, (long int)tval_result.tv_usec);
+
+
+
+
     while (1) {
         visible_now  = false;
 		uint16_t ad  = sdk_system_adc_read();
-        printf("Analog read value: %u ", ad);
+        //printf("Analog read value: %u ", ad);
 		if (ad <= threshold) {
             visible_now = true;
 			//printf("====== read analog ======\n");
