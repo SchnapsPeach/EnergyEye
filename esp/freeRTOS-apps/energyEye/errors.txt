@@ -36,3 +36,38 @@ LD build/energyEye.out
 /home/gus/dev/esp/rtos/newlib/build/xtensa-lx106-elf/newlib/libc/syscalls/../../../../../newlib/libc/syscalls/sysgettod.c:12: undefined reference to `_gettimeofday_r'
 collect2: error: ld returned 1 exit status
 make: *** [build/energyEye.out] Error 1
+
+
+
+
+==== Versuch 2: ====
+
+Nutzung von clock_gettime()
+
+Quelle: http://users.pja.edu.pl/~jms/qnx/help/watcom/clibref/qnx/clock_gettime.html
+
+
+== Code: ==
+
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <time.h>
+#define _POSIX_C_SOURCE 199309L
+...
+    struct timespec start, stop;
+    clock_gettime( CLOCK_REALTIME, &start);
+    for (int i=0; i<1000; i++) {
+    }
+    clock_gettime( CLOCK_REALTIME, &stop);
+
+
+== Compile-Resultat: ==
+
+CC /home/rero/Workspaces/IoT/EnergyEye/esp/freeRTOS-apps/energyEye/energyEye.c
+/home/rero/Workspaces/IoT/EnergyEye/esp/freeRTOS-apps/energyEye/energyEye.c: In function 'analogTask':
+/home/rero/Workspaces/IoT/EnergyEye/esp/freeRTOS-apps/energyEye/energyEye.c:206:5: error: implicit declaration of function 'clock_gettime' [-Werror=implicit-function-declaration]
+     clock_gettime( CLOCK_REALTIME, &start);
+     ^
+cc1: all warnings being treated as errors
+make: *** [build/program//energyEye.o] Error 1

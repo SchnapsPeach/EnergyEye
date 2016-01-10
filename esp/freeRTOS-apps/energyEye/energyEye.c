@@ -25,9 +25,18 @@
 
 // Try 1:
 // Reference: https://stackoverflow.com/questions/33107237/implicit-declaration-of-timersub-function-in-linux-what-must-i-define
-#include <sys/time.h>
-#define _BSD_SOURCE
+//#include <sys/time.h>
+//#define _BSD_SOURCE
 
+// Try 2:
+// Reference: http://users.pja.edu.pl/~jms/qnx/help/watcom/clibref/qnx/clock_gettime.html
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <time.h>
+#define _POSIX_C_SOURCE 199309L
+    
+    
 
 
 
@@ -181,18 +190,23 @@ void analogTask(void *pvParameters) {
 	int  threshold = 512;
 
 
-    // Try 1:
-    struct timeval tval_before, tval_after, tval_result;
-    gettimeofday(&tval_before, NULL);
-    // Some code you want to time, for example:
-    //sleep(1);
+//    // Try 1:
+//    struct timeval tval_before, tval_after, tval_result;
+//   gettimeofday(&tval_before, NULL);
+//    // Some code you want to time, for example:
+//    //sleep(1);
+//    for (int i=0; i<1000; i++) {
+//    }
+//    gettimeofday(&tval_after, NULL);
+//    //timersub(&tval_after, &tval_before, &tval_result);
+//    printf("Time elapsed: %ld.%06ld\n", (long int)tval_result.tv_sec, (long int)tval_result.tv_usec);
+
+    // Try 2:
+    struct timespec start, stop;
+    clock_gettime( CLOCK_REALTIME, &start);
     for (int i=0; i<1000; i++) {
     }
-    gettimeofday(&tval_after, NULL);
-    //timersub(&tval_after, &tval_before, &tval_result);
-    printf("Time elapsed: %ld.%06ld\n", (long int)tval_result.tv_sec, (long int)tval_result.tv_usec);
-
-
+    clock_gettime( CLOCK_REALTIME, &stop);
 
 
     while (1) {
