@@ -1,10 +1,18 @@
-/* Respond to a button press.
+/*
+ * HSRM IoT Project: EnergyEye - a DIY Smart Meter
  *
- * This code combines two ways of checking for a button press -
- * busy polling (the bad way) and button interrupt (the good way).
+ * Reading an rotational electricity meter using an optical infrared (IR)
+ * reflection sensor.
  *
- * This sample code is in the public domain.
+ * This code is based on the "button" example contained in the esp-open-rtos
+ * framework.
+ *
+ * Dependencies:
+ * esp-open-rtos - https://github.com/SuperHouse/esp-open-rtos
+ * esp-open-sdk  - https://github.com/pfalcon/esp-open-sdk/
  */
+
+
 #include "espressif/esp_common.h"
 #include "espressif/esp_system.h"
 #include "esp/uart.h"
@@ -21,44 +29,43 @@
 #include "lwip/netdb.h"
 #include "lwip/dns.h"
 
+
+// Reference to the wireless network configuration (not checked in to gitHub).
 #include "ssid_config.h"
 
-// Try 1:
-// Reference: https://stackoverflow.com/questions/33107237/implicit-declaration-of-timersub-function-in-linux-what-must-i-define
-//#include <sys/time.h>
-//#define _BSD_SOURCE
 
-// Try 2:
-// Reference: http://users.pja.edu.pl/~jms/qnx/help/watcom/clibref/qnx/clock_gettime.html
-//#include <stdio.h>
-//#include <unistd.h>
-//#include <stdlib.h>
-//#include <time.h>
-//#define _POSIX_C_SOURCE 199309L
-    
-    
+// Thingspeak IoT data push service information (public access).
+#define  WEB_SERVER "api.thingspeak.com"
+#define  WEB_PORT   "80"
+#define  WEB_URL    "https://api.thingspeak.com/update"
+// Reference to the thingspeak API key (not checked in to gitHub).
+#include "thingspeak_api_key.h"
 
-
-
-#define WEB_SERVER "api.thingspeak.com"
-#define WEB_PORT "80"
-#define WEB_URL "https://api.thingspeak.com/update"
-#define API_KEY "S9SNYGVX6RV4EBZL"
 
 static char fields[128];
 static char req[1024];
 
-/* pin config */
-//const int gpioLED = 13;
 
+// Pin configuration on the ESP8266 Model ESP-12E.
+
+// A RGB LED is used as a status display.
 const int gpio_r = 12;
 const int gpio_g = 13;
 const int gpio_b = 14;
+//const int gpioLED = 13;
 
-
+// GPIO input configuration and interrupt attachment
 const int gpioIN = 4;  
 const gpio_inttype_t int_type = GPIO_INTTYPE_EDGE_POS;
 #define GPIO_HANDLER gpio04_interrupt_handler
+
+
+// Queue definition to communicate between tasks
+static xQueueHandle tsqueue;
+
+
+
+// This function executes a HTTP POST request with a numeric value as payload. 
 
 int http_post_request(int val) {
 
@@ -149,14 +156,20 @@ int http_post_request(int val) {
 	return 0;
 }
 
+
+
 /* This task configures the GPIO interrupt and uses it to tell
-   when the button is pressed.
+ * when the button is pressed.
+ *
+ * The interrupt handler communicates the exact button press time to
+ * the task via a queue.
+ *
+ * This is a better example of how to wait for button input!
+ */
 
-   The interrupt handler communicates the exact button press time to
-   the task via a queue.
+// This task receives the GPIO button press values from the interrupt
+// service routine via the communication queue.
 
-   This is a better example of how to wait for button input!
-*/
 void gpioIntTask(void *pvParameters)
 {
     printf("Waiting for button press interrupt on gpio %d...\r\n", gpioIN);
@@ -172,51 +185,40 @@ void gpioIntTask(void *pvParameters)
     }
 }
 
-static xQueueHandle tsqueue;
+
+
+// This is the interrupt service routine listening for a button press
 
 void GPIO_HANDLER(void)
 {
     // Reads from gpio
     //uint8_t val = gpio_read(gpioIN);
-	//gpio_write(gpio_r, val);
-	//printf("val: %d\n", val);
+    //gpio_write(gpio_r, val);
+    //printf("val: %d\n", val);
     //xQueueSendToBackFromISR(tsqueue, &val, NULL);
-	//gpio_write(gpio_r, !val);
+    //gpio_write(gpio_r, !val);
 }
 
+
+
+// This task reads an analog value coming from the IR reflection sensor
+
 void analogTask(void *pvParameters) {
-    bool visible_now  = false;
-    bool visible_prev = false;
-	int  threshold = 512;
 
+    bool visible_now          = false;
+    bool visible_prev         = false;
+    int  threshold            = 512;
 
-//    // Try 1:
-//    struct timeval tval_before, tval_after, tval_result;
-//   gettimeofday(&tval_before, NULL);
-//    // Some code you want to time, for example:
-//    //sleep(1);
-//    for (int i=0; i<1000; i++) {
-//    }
-//    gettimeofday(&tval_after, NULL);
-//    //timersub(&tval_after, &tval_before, &tval_result);
-//    printf("Time elapsed: %ld.%06ld\n", (long int)tval_result.tv_sec, (long int)tval_result.tv_usec);
-
-//    // Try 2:
-//    struct timespec start, stop;
-//    clock_gettime( CLOCK_REALTIME, &start);
-//    for (int i=0; i<1000; i++) {
-//    }
-//    clock_gettime( CLOCK_REALTIME, &stop);
-
-    // Try 3: xTaskGetTickCount()
-
-
-
-
+    int  markerSeenCount      = 0;
+    int  tickCountStart       = 0;
+    int  tickCountStop        = 0;
+    int  markerVisibleTime    = 0;
+    int  markerInvisibleTime  = 0;
 
     while (1) {
-        visible_now  = false;
-		uint16_t ad  = sdk_system_adc_read();
+
+        visible_now = false;
+		uint16_t ad = sdk_system_adc_read();
         
         // DEBUG:
         //printf("Analog read value: %u ", ad);
@@ -227,64 +229,93 @@ void analogTask(void *pvParameters) {
         //printf("portTICK_PERIOD_MS is: %u ", portTICK_PERIOD_MS);
         //printf("\n");
 
-        
-        // TODO: Initialize global variables correctly.
-        int markerSeenCount;
-        int tickCountStart;
-        int tickCountStop;
-        int markerVisibleTime;
-        
 		if (ad <= threshold) {
+
             visible_now = true;
 			//printf("====== read analog ======\n");
 			//printf("BELOW THRESHOLD ");
             //printf("\n");
+
 		}
+
+        // Set RGB to red if the marking on the electricity meter is visible
         gpio_write(gpio_r, visible_now);
+
+        // Take action if the visibility state has changed.
         if (visible_prev != visible_now) {
+
+            // If the Marker is now visible, save the start time.
             if (visible_now == true) {
+
                 printf("Marker +++++ START +++++ detected!");
                 printf("\n");
                 tickCountStart = xTaskGetTickCount() * portTICK_RATE_MS;
+
+                // TODO: Check for correct values after initialization!
+                // MarkerInvisibleTime could be very short dirctly after boot-up.
+                markerInvisibleTime = tickCountStart - tickCountStop;
+                printf("Marker was Invisible for %d milliseconds.", markerInvisibleTime);
+                printf("\n");
+
             }
+
+            // If the marker is now not visible anymore, save the stop time
+            // and calculate the duration how long the marker was visible.
+            // Also ingrement the counter how often the marker was seen.
             if (visible_now == false) {
+
                 printf("Marker ----- STOP  ----- detected!");
                 printf("\n");
                 tickCountStop  = xTaskGetTickCount() * portTICK_RATE_MS;
+
                 // TODO: Check for tickCount overflow!
                 markerVisibleTime = tickCountStop - tickCountStart;
                 printf("Marker was visible for %d milliseconds.", markerVisibleTime);
                 printf("\n");
+
                 markerSeenCount = markerSeenCount + 1;
                 printf("Registered the marker %d times.", markerSeenCount);
                 printf("\n");
-            }            
+
+            }
+
             visible_prev = visible_now;
+
         }
+
         //xQueueSendToBackFromISR(tsqueue, &val, NULL);
         //fputs(visible_now ? "true" : "false", stdout);
         //printf("\n");
-        // Task runs every 20 milliseconds. A value of 1 here causes errors.
+
+        // Task runs every 20 milliseconds.
+        // A value of (1 / portTICK_RATE_MS) here causes errors.
         vTaskDelay(20 / portTICK_RATE_MS);
+
         // TODO: Should we move the time measurement into the ISR?
+
 	}
+
 }
+
+
+
+// This is the main entry task after the freeRTOS initialization
 
 void user_init(void)
 {
     uart_set_baud(0, 115200);
 
     printf("SDK version:%s\n", sdk_system_get_sdk_version());
-    
+
+    // GPIO pin input/output configuration
     gpio_enable(gpioIN, GPIO_INPUT);
     gpio_set_interrupt(gpioIN, int_type);
-
     //gpio_enable(gpioLED, GPIO_OUTPUT);
     gpio_enable(gpio_r, GPIO_OUTPUT);
     gpio_enable(gpio_g, GPIO_OUTPUT);
     gpio_enable(gpio_b, GPIO_OUTPUT);
 
-
+    // Load wireless network configuration data
     struct sdk_station_config config = {
         .ssid = WIFI_SSID,
         .password = WIFI_PASS,
@@ -294,7 +325,10 @@ void user_init(void)
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_set_config(&config);
 
+    // Initialize the queue defined at the top of this file to communicate between tasks.
     tsqueue = xQueueCreate(5, sizeof(uint8_t));
+
+    // Create tasks to be executed during runtime
     xTaskCreate(gpioIntTask, (signed char *)"gpioIntTask", 256, &tsqueue, 2, NULL);
     xTaskCreate(analogTask,  (signed char *)"analogTask",  256, &tsqueue, 2, NULL);
 }
