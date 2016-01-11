@@ -217,7 +217,17 @@ void analogTask(void *pvParameters) {
     while (1) {
         visible_now  = false;
 		uint16_t ad  = sdk_system_adc_read();
+        
+        // DEBUG:
         //printf("Analog read value: %u ", ad);
+        //printf("\n");
+        //printf("portTICK_RATE_MS is: %u ", portTICK_RATE_MS);
+        //printf("\n");
+        // INFO: portTICK_RATE_MS is 10
+        //printf("portTICK_PERIOD_MS is: %u ", portTICK_PERIOD_MS);
+        //printf("\n");
+
+        
         // TODO: Initialize global variables correctly.
         int markerSeenCount;
         int tickCountStart;
@@ -254,10 +264,9 @@ void analogTask(void *pvParameters) {
         //xQueueSendToBackFromISR(tsqueue, &val, NULL);
         //fputs(visible_now ? "true" : "false", stdout);
         //printf("\n");
-        // Task runs every millisecond.
-        // TODO: Check if too often.
-        //       Should we move the time measurement into the ISR?
-        vTaskDelay(1 / portTICK_RATE_MS);		
+        // Task runs every 20 milliseconds. A value of 1 here causes errors.
+        vTaskDelay(20 / portTICK_RATE_MS);
+        // TODO: Should we move the time measurement into the ISR?
 	}
 }
 
