@@ -62,6 +62,7 @@ const gpio_inttype_t int_type = GPIO_INTTYPE_EDGE_POS;
 
 // Queue definition to communicate between tasks
 static xQueueHandle tsqueue;
+static xQueueHandle analogValueQueue;
 
 
 
@@ -202,18 +203,19 @@ void GPIO_HANDLER(void)
 
 
 // This task reads an analog value coming from the IR reflection sensor
+// Currently, the analog pin is polled every 20 milliseconds for a new value.
 
-void analogTask(void *pvParameters) {
+void analogReadTask(void *pvParameters) {
 
-    bool visible_now          = false;
-    bool visible_prev         = false;
-    int  threshold            = 512;
+    bool      visible_now          = false;
+    bool      visible_prev         = false;
+    int       threshold            = 512;
 
-    int  markerSeenCount      = 0;
-    int  tickCountStart       = 0;
-    int  tickCountStop        = 0;
-    int  markerVisibleTime    = 0;
-    int  markerInvisibleTime  = 0;
+    int       markerSeenCount      = 0;
+    uint32_t  tickCountStart       = 0;
+    uint32_t  tickCountStop        = 0;
+    uint32_t  markerVisibleTime    = 0;
+    uint32_t  markerInvisibleTime  = 0;
 
     while (1) {
 
@@ -273,6 +275,8 @@ void analogTask(void *pvParameters) {
                 printf("Marker was visible for %d milliseconds.", markerVisibleTime);
                 printf("\n");
 
+                xQueueSend(analogValueQueue, &markerVisibleTime, portMAX_DELAY);
+
                 markerSeenCount = markerSeenCount + 1;
                 printf("Registered the marker %d times.", markerSeenCount);
                 printf("\n");
@@ -297,6 +301,31 @@ void analogTask(void *pvParameters) {
 
 }
 
+
+
+// This task buffers values received from the analogReadTask and regularly
+// sends them off to the server back end.
+
+void valueHandlingTask(void *pvParameters) {
+
+    // TODO: Add buffering code for values recieved from analogReadTask.
+    // TODO: Add a call to http_post_request.
+
+    printf("Task valueHandling started. Waiting for millisecond value.\r\n");
+    xQueueHandle *analogValueQueue = (xQueueHandle *)pvParameters;
+
+    while(1) {
+
+        uint32_t ms_visible_value;
+        xQueueReceive(*analogValueQueue, &ms_visible_value, portMAX_DELAY);
+        printf("Received ms_ON_value: %d\r\n", ms_visible_value);
+        // if (http_post_request(val) != 0) {
+        //     printf("ERROR: HTTP_POST Request failed :(\n");
+        // }
+
+    }
+
+}
 
 
 // This is the main entry task after the freeRTOS initialization
@@ -325,10 +354,18 @@ void user_init(void)
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_set_config(&config);
 
-    // Initialize the queue defined at the top of this file to communicate between tasks.
-    tsqueue = xQueueCreate(5, sizeof(uint8_t));
+    // Initialize the queues defined at the top of this file to communicate between tasks.
+    // Queue for the GPIO input handler
+    tsqueue          = xQueueCreate(5, sizeof(uint8_t));
+    // Queue to transfer a value from analogReadTask to analogSendTask
+    // The queue can hold up to 10 millisecond values.
+    // One day has 86.400.000 milliseconds.
+    // The maximum of a 32 bit unsigned int is 4.294.967.295 which corresponds to 49,710269618 days
+    // If the marking was not detected for that long, ther must have been a power outage.
+    analogValueQueue = xQueueCreate(10, sizeof(uint32_t));
 
     // Create tasks to be executed during runtime
-    xTaskCreate(gpioIntTask, (signed char *)"gpioIntTask", 256, &tsqueue, 2, NULL);
-    xTaskCreate(analogTask,  (signed char *)"analogTask",  256, &tsqueue, 2, NULL);
+    xTaskCreate(gpioIntTask,       (signed char *)"gpioIntTask",       256, &tsqueue,          2, NULL);
+    xTaskCreate(analogReadTask,    (signed char *)"analogReadTask",    256, &analogValueQueue, 2, NULL);
+    xTaskCreate(valueHandlingTask, (signed char *)"valueHandlingTask", 256, &analogValueQueue, 2, NULL);
 }
