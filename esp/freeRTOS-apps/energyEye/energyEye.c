@@ -30,11 +30,11 @@
 
 // Try 2:
 // Reference: http://users.pja.edu.pl/~jms/qnx/help/watcom/clibref/qnx/clock_gettime.html
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <time.h>
-#define _POSIX_C_SOURCE 199309L
+//#include <stdio.h>
+//#include <unistd.h>
+//#include <stdlib.h>
+//#include <time.h>
+//#define _POSIX_C_SOURCE 199309L
     
     
 
@@ -201,37 +201,63 @@ void analogTask(void *pvParameters) {
 //    //timersub(&tval_after, &tval_before, &tval_result);
 //    printf("Time elapsed: %ld.%06ld\n", (long int)tval_result.tv_sec, (long int)tval_result.tv_usec);
 
-    // Try 2:
-    struct timespec start, stop;
-    clock_gettime( CLOCK_REALTIME, &start);
-    for (int i=0; i<1000; i++) {
-    }
-    clock_gettime( CLOCK_REALTIME, &stop);
+//    // Try 2:
+//    struct timespec start, stop;
+//    clock_gettime( CLOCK_REALTIME, &start);
+//    for (int i=0; i<1000; i++) {
+//    }
+//    clock_gettime( CLOCK_REALTIME, &stop);
+
+    // Try 3: xTaskGetTickCount()
+
+
+
 
 
     while (1) {
         visible_now  = false;
 		uint16_t ad  = sdk_system_adc_read();
         //printf("Analog read value: %u ", ad);
+        // TODO: Initialize global variables correctly.
+        int markerSeenCount;
+        int tickCountStart;
+        int tickCountStop;
+        int markerVisibleTime;
+        
 		if (ad <= threshold) {
             visible_now = true;
 			//printf("====== read analog ======\n");
-			printf("BELOW THRESHOLD ");
+			//printf("BELOW THRESHOLD ");
+            //printf("\n");
 		}
         gpio_write(gpio_r, visible_now);
         if (visible_prev != visible_now) {
             if (visible_now == true) {
                 printf("Marker +++++ START +++++ detected!");
+                printf("\n");
+                tickCountStart = xTaskGetTickCount() * portTICK_RATE_MS;
             }
             if (visible_now == false) {
                 printf("Marker ----- STOP  ----- detected!");
+                printf("\n");
+                tickCountStop  = xTaskGetTickCount() * portTICK_RATE_MS;
+                // TODO: Check for tickCount overflow!
+                markerVisibleTime = tickCountStop - tickCountStart;
+                printf("Marker was visible for %d milliseconds.", markerVisibleTime);
+                printf("\n");
+                markerSeenCount = markerSeenCount + 1;
+                printf("Registered the marker %d times.", markerSeenCount);
+                printf("\n");
             }            
             visible_prev = visible_now;
         }
         //xQueueSendToBackFromISR(tsqueue, &val, NULL);
-        fputs(visible_now ? "true" : "false", stdout);
-        printf("\n");
-        vTaskDelay(200 / portTICK_RATE_MS);		
+        //fputs(visible_now ? "true" : "false", stdout);
+        //printf("\n");
+        // Task runs every millisecond.
+        // TODO: Check if too often.
+        //       Should we move the time measurement into the ISR?
+        vTaskDelay(1 / portTICK_RATE_MS);		
 	}
 }
 
