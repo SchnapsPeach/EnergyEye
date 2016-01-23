@@ -34,6 +34,10 @@
 #include "ssid_config.h"
 
 
+// --------------------------------------- //
+//   Externally configurable parameters:   //  TODO!
+// --------------------------------------- //
+
 // Thingspeak IoT data push service information (public access).
 //#define  WEB_SERVER "api.thingspeak.com"
 //#define  WEB_PORT   "80"
@@ -42,13 +46,35 @@
 //#include "thingspeak_api_key.h"
 
 //http://demo.volkszaehler.org/middleware.php/data/4f5687c0-bb8a-11e5-88ef-4731a4ea7f5b.json?operation=add&value=2
-#define  WEB_SERVER "demo.volkszaehler.org"
-#define  WEB_PORT   "80"
-#define  WEB_URL    "http://demo.volkszaehler.org/middleware.php/data/"
+//#define  WEB_SERVER "demo.volkszaehler.org"
+//#define  WEB_SERVER "192.168.178.23"
+//#define  WEB_SERVER "raspberrypi"
+//#define  WEB_PORT   "80"
+//#define  WEB_URL    "http://demo.volkszaehler.org/middleware.php/data/"
+//#define  WEB_URL    "http://192.168.178.23/middleware.php/data/"
+//#define  WEB_URL    "http://raspberrypi/middleware.php/data/"
+
+// ===== Volkszaehler host parameters ===== //
+//char web_server[] = "raspberrypi";
+char web_server[] = "demo.volkszaehler.org";
+char   web_port[] = "80";
 
 // Volkszaehler channel UUID variable configurable at runtime
-// TODO: Sanity checks length, format, ... ?
-char vzChannelUUID[] = "4f5687c0-bb8a-11e5-88ef-4731a4ea7f5b";
+// Channel EnergyEyeDigital on raspberrypi
+//char vzChannelUUID[] = "0bb87ea0-c12c-11e5-b05f-9faaf945ba37";
+// Channel EnergyEyeDSZ on demo.volkszaehler.org
+char vzChannelUUID[] = "594b40e0-c149-11e5-90db-bdbda4dec9f0";
+// ===== Sensor parameters ===== //
+// Range: 0 (0 Volt) - 1023 (1 Volt)
+int analogStartThreshold   = 410;
+int analogStopThreshold    = 400;
+
+// Electricity meter calibration factor in Revolutions per kWh
+//  Socket rotational electricity meter:  600 Revolutions per kWh (default here)
+//   House rotational electricity meter:   75 Revolutions per kWh
+//            Digital electricity meter: 1000    Impulses per kWh
+int calibrationFactor = 600;
+
 
 
 static char valueFields[ 128];
@@ -71,15 +97,8 @@ const gpio_inttype_t int_type = GPIO_INTTYPE_EDGE_POS;
 // Queue definition to communicate between tasks
 static xQueueHandle tsqueue;
 static xQueueHandle analogValueQueue;
+//static xQueueHandle analogLogQueue;
 
-// Default analog read threshold is half of the ADC range.
-int analogThreshold   = 512;
-
-// Electricity meter calibration factor in Revolutions per kWh
-//  Socket rotational electricity meter:  600 Revolutions per kWh (default here)
-//   House rotational electricity meter:   75 Revolutions per kWh
-//            Digital electricity meter: 1000    Impulses per kWh
-int calibrationFactor = 600;
 
 
 
@@ -183,7 +202,7 @@ int http_get_request(int val) {
     // Turn blue LED on to indicate send procedure.
     gpio_write(gpio_b, 1);
     
-    printf("[HTTP GET] HTTP GET transmission starting...\r\n");
+    //printf("[HTTP GET] HTTP GET transmission starting...\r\n");
     
     // ???
     const struct addrinfo hints = {
@@ -192,8 +211,8 @@ int http_get_request(int val) {
     };
     struct addrinfo *res;
     
-    printf("[HTTP GET] Running DNS lookup for %s...\r\n", WEB_SERVER);
-    int err = getaddrinfo(WEB_SERVER, WEB_PORT, &hints, &res);
+    //printf("[HTTP GET] Running DNS lookup for %s...\r\n", web_server);
+    int err = getaddrinfo(web_server, web_port, &hints, &res);
     
     if(err != 0 || res == NULL) {
         printf("[HTTP GET] DNS lookup failed err=%d res=%p\r\n", err, res);
@@ -203,8 +222,8 @@ int http_get_request(int val) {
         return -1;
     }
     /* Note: inet_ntoa is non-reentrant, look at ipaddr_ntoa_r for "real" code */
-    struct in_addr *addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
-    printf("[HTTP GET] DNS lookup succeeded. IP=%s\r\n", inet_ntoa(*addr));
+    //struct in_addr *addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
+    //printf("[HTTP GET] DNS lookup succeeded. IP=%s\r\n", inet_ntoa(*addr));
     
     int s = socket(res->ai_family, res->ai_socktype, 0);
     if(s < 0) {
@@ -214,7 +233,7 @@ int http_get_request(int val) {
         return -1;
     }
     
-    printf("[HTTP GET] ... allocated socket\r\n");
+    //printf("[HTTP GET] ... allocated socket\r\n");
     
     if(connect(s, res->ai_addr, res->ai_addrlen) != 0) {
         close(s);
@@ -224,7 +243,7 @@ int http_get_request(int val) {
         return -1;
     }
     
-    printf("[HTTP GET] ... connected\r\n");
+    //printf("[HTTP GET] ... connected\r\n");
     freeaddrinfo(res);
     
     // Building HTTP GET request string
@@ -245,10 +264,13 @@ int http_get_request(int val) {
     const char *requestStructure =
             "GET"
             " "
-            "http://demo.volkszaehler.org/middleware.php/data/"
-            "%s"
+            //"http://demo.volkszaehler.org/middleware.php/data/"
+            "http://"
+            "%s" // <-- web_server
+            "/middleware.php/data/"
+            "%s" // <-- vzChannelUUID
             ".json?operation=add&value="
-            "%d"
+            "%d" // <-- energy value
             "\r\n"
             "User-Agent: esp-open-rtos/0.1 esp8266"
             "\r\n"
@@ -268,9 +290,9 @@ int http_get_request(int val) {
     // and fill out the placeholder %s with the 'vzChannelUUID' stringbuffer
     // and fill out the placeholder %d with the 'valueFields' integer varaible
     //sprintf(httpRequest, requestStructure, valueFields); // BUG: DOES STRANGE THINGS!
-    sprintf(httpRequest, requestStructure, vzChannelUUID, val);
+    sprintf(httpRequest, requestStructure, web_server, vzChannelUUID, val);
     
-    printf("[HTTP GET] REQUEST:\r\n%s\r\n", httpRequest);
+    //printf("[HTTP GET] REQUEST:\r\n%s\r\n", httpRequest);
     
     if (write(s, httpRequest, strlen(httpRequest)) < 0) {
         printf("[HTTP GET] ... socket send failed\r\n");
@@ -278,7 +300,7 @@ int http_get_request(int val) {
         //vTaskDelay(4000 / portTICK_RATE_MS);
         return -1;
     }
-    printf("[HTTP GET] ... socket send success\r\n");
+    //printf("[HTTP GET] ... socket send success\r\n");
     
     static char recv_buf[128];
     int r = 0;
@@ -286,10 +308,10 @@ int http_get_request(int val) {
         bzero(recv_buf, 128);
         r = read(s, recv_buf, 127);
         if(r > 0) {
-            printf("[HTTP GET] Received:\r\n%s\r\n", recv_buf);
+            //printf("[HTTP GET] Received:\r\n%s\r\n", recv_buf);
         }
     } while(r > 0);
-    printf("[HTTP GET] ... done reading from socket. Last read return=%d errno=%d\r\n", r, errno);printf("\n");
+    //printf("[HTTP GET] ... done reading from socket. Last read return=%d errno=%d\r\n", r, errno);printf("\n");
     
     close(s);
     
@@ -349,57 +371,74 @@ int http_get_request(int val) {
 
 void analogReadTask(void *pvParameters) {
     
-    bool      visible_now          = false;
-    bool      visible_prev         = false;
+    bool     visible_now          = false;
+    bool     visible_prev         = false;
     // Threshold is defined globally to be configurable from outside.
-    //int       analogThreshold      = 512;
     
-    int       markerSeenCount       = 0;
-    uint32_t  tickCountStart        = 0;
-    uint32_t  tickCountStop         = 0;
-    uint32_t  markerVisibleTime     = 0;
-    uint32_t  markerInvisibleTime   = 0;
-    uint32_t  markerRevolutionTime  = 0;
+    int      markerSeenCount       = 0;
+    uint32_t tickCountStart        = 0;
+    uint32_t tickCountStop         = 0;
+    uint32_t markerVisibleTime     = 0;
+    uint32_t markerInvisibleTime   = 0;
+    uint32_t markerRevolutionTime  = 0;
+    
+    int      deadTime              = 0;
+    
+    uint16_t analogValue           = 0;
     
     while (1) {
         
-        visible_now = false;
-		uint16_t ad = sdk_system_adc_read();
+        //visible_now = false;
+        analogValue = sdk_system_adc_read();
         
         // DEBUG:
-        //printf("Analog read value: %u ", ad);
-        //printf("\n");
+        printf("%u\r\n", analogValue);
         //printf("portTICK_RATE_MS is: %u ", portTICK_RATE_MS);
         //printf("\n");
         // INFO: portTICK_RATE_MS is 10
         //printf("portTICK_PERIOD_MS is: %u ", portTICK_PERIOD_MS);
         //printf("\n");
         
-		if (ad <= analogThreshold) {
+        if (analogValue >= analogStartThreshold) {
             
             visible_now = true;
-			//printf("====== read analog ======\n");
-			//printf("BELOW THRESHOLD ");
+            //printf("====== read analog ======\n");
+            //printf("BELOW THRESHOLD ");
             //printf("\n");
             
-		}
-
-        // Set RGB to red if the marking on the electricity meter is visible
-        gpio_write(gpio_r, visible_now);
+        }
         
+        if (analogValue <= analogStopThreshold) {
+            
+            visible_now = false;
+            //printf("====== read analog ======\n");
+            //printf("BELOW THRESHOLD ");
+            //printf("\n");
+            
+        }
+           
         // Take action if the visibility state has changed.
         if (visible_prev != visible_now) {
+            
+            // Set RGB to red if the marking on the electricity meter is visible
+            gpio_write(gpio_r, visible_now);
             
             // If the Marker is now visible, save the start time.
             if (visible_now == true) {
 
-                printf("[ANALOGRD] Marker +++++ START +++++ detected!\r\n");
-                tickCountStart = xTaskGetTickCount() * portTICK_RATE_MS;
-                
-                // TODO: Check for correct values after initialization!
-                // MarkerInvisibleTime could be very short dirctly after boot-up.
-                markerInvisibleTime = tickCountStart - tickCountStop;
-                printf("[ANALOGRD] Marker was invisible for %d milliseconds.\r\n", markerInvisibleTime);
+                if (deadTime == 0) {
+
+                    deadTime = 3;
+
+                    //printf("[ANALOGRD] Marker +++++ START +++++ detected!\r\n");
+                    tickCountStart = xTaskGetTickCount() * portTICK_RATE_MS;
+                    
+                    // TODO: Check for correct values after initialization!
+                    // MarkerInvisibleTime could be very short dirctly after boot-up.
+                    markerInvisibleTime = tickCountStart - tickCountStop;
+                    //printf("[ANALOGRD] Marker was invisible for %d milliseconds.\r\n", markerInvisibleTime);
+
+                }
                 
             }
             
@@ -407,34 +446,41 @@ void analogReadTask(void *pvParameters) {
             // and calculate the duration how long the marker was visible.
             // Also ingrement the counter how often the marker was seen.
             if (visible_now == false) {
+
+                if (deadTime == 0) {
+                    
+                    deadTime = 3;
                 
-                printf("[ANALOGRD] Marker ----- STOP  ----- detected!\r\n");
-                tickCountStop  = xTaskGetTickCount() * portTICK_RATE_MS;
-                
-                // TODO: Check for tickCount overflow!
-                markerVisibleTime = tickCountStop - tickCountStart;
-                printf("[ANALOGRD] Marker was visible for %d milliseconds.\r\n", markerVisibleTime);
-                                
-                markerSeenCount = markerSeenCount + 1;
-                printf("[ANALOGRD] Registered the marker %d times.\r\n", markerSeenCount);
-                
-                markerRevolutionTime = markerInvisibleTime + markerVisibleTime;
-                
-                if (markerSeenCount <= 1) {
-                    // We don't send a value the fist time because it's a bogus
-                    // value for sure due to the unknown markerInvisibleTime.
-                } else {
-                    xQueueSend(analogValueQueue, &markerRevolutionTime, portMAX_DELAY);    
+                    //printf("[ANALOGRD] Marker ----- STOP  ----- detected!\r\n");
+                    tickCountStop  = xTaskGetTickCount() * portTICK_RATE_MS;
+                    
+                    // TODO: Check for tickCount overflow!
+                    markerVisibleTime = tickCountStop - tickCountStart;
+                    //printf("[ANALOGRD] Marker was visible for %d milliseconds.\r\n", markerVisibleTime);
+                                    
+                    markerSeenCount = markerSeenCount + 1;
+                    //printf("[ANALOGRD] Registered the marker %d times.\r\n", markerSeenCount);
+                    
+                    markerRevolutionTime = markerInvisibleTime + markerVisibleTime;
+                    
+                    if (markerSeenCount <= 1) {
+                        // We don't send a value the fist time because it's a bogus
+                        // value for sure due to the unknown markerInvisibleTime.
+                    } else {
+                        xQueueSend(analogValueQueue, &markerRevolutionTime, portMAX_DELAY);
+                    }
                 }
-                
-
-
             }
-
+            
             visible_prev = visible_now;
-
+            
         }
-
+        
+        if (deadTime > 0) {
+            //printf("[ANALOGRD] deadTime counter: %d \r\n", deadTime);
+            deadTime = deadTime - 1;
+        }
+        
         //xQueueSendToBackFromISR(tsqueue, &val, NULL);
         //fputs(visible_now ? "true" : "false", stdout);
         //printf("\n");
@@ -468,7 +514,7 @@ void valueHandlingTask(void *pvParameters) {
         
         uint32_t ms_revolution_value;
         xQueueReceive(*analogValueQueue, &ms_revolution_value, portMAX_DELAY);
-        printf("[VALHANDL] Received ms_revolution_value: %d\r\n", ms_revolution_value);
+        //printf("[VALHANDL] Received ms_revolution_value: %d\r\n", ms_revolution_value);
         
         // Calibration factor is in Revolutions per kWh
         // Meaning: X Revolutions per 1000 Watts in 3600 Seconds
@@ -476,9 +522,9 @@ void valueHandlingTask(void *pvParameters) {
         
         // TODO: Why is a floating point value not displayed correctly?
         // Is this FreeRTOS specific?
-        printf("[VALHANDL] Calculated energy value: %f\r\n", energyValue);
+        //printf("[VALHANDL] Calculated energy value: %f\r\n", energyValue);
         // Trying integer typecast...
-        printf("[VALHANDL] Typecasted energy value: %d\r\n", (int)energyValue);
+        //printf("[VALHANDL] Typecasted energy value: %d\r\n", (int)energyValue);
         
         http_get_request((int)energyValue);
         
@@ -529,6 +575,7 @@ void user_init(void)
     // The maximum of a 32 bit unsigned int is 4.294.967.295 which corresponds to 49,710269618 days
     // If the marking was not detected for that long, ther must have been a power outage.
     analogValueQueue = xQueueCreate(10, sizeof(uint32_t));
+    //analogLogQueue   = xQueueCreate(10, sizeof(uint16_t));
 
     // Create tasks to be executed during runtime
     //xTaskCreate(gpioIntTask,       (signed char *)"gpioIntTask",       256, &tsqueue,          2, NULL);
